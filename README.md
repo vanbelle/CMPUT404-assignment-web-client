@@ -21,6 +21,6 @@ compatible) http://docs.python.org/2/library/socketserver.html
 
 References
 ========================
-https://docs.python.org/2/library/socket.html 2016/01/27
+https://docs.python.org/2/library/socket.html 2016/01/27  
 http://www.binarytides.com/python-socket-programming-tutorial/ 2016/01/27
 
