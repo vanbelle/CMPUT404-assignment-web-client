@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-# Copyright 2013 Abram Hindle
+# Copyright 2013 Abram Hindle, 2016 Sarah Van Belleghem
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,20 +33,44 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
 
+    #separate the port number from the rest of the url if needed
+    def get_host_port(self,url):
+        get_port = url.split(":")
+        url = get_port[0]
+
+        #check if a port was given, otherwise go to port 80
+        if (len(get_port) > 1):
+            port = int(get_port[1])
+        else:
+            port = 80
+        return url, port
+
+    #establish a connection with the specified host page
+    #http://effbot.org/zone/effnews.htm#effnews-1 2016/27/01
     def connect(self, host, port):
-        # use sockets!
-        return None
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, port))
+        return s
 
+    #get the status code for the HTTP response
     def get_code(self, data):
-        return None
+        headers = self.get_headers(data)
+        headers_split = headers.split(" ")
+        code  = int(headers_split[1])
+        return code
 
+    #extract the headers from the page data
     def get_headers(self,data):
-        return None
+        index = data.index("<")
+        header = data[:index]
+        return header
 
+    #get the page date, exclude the headers
     def get_body(self, data):
-        return None
+        index = data.index("<")
+        body = data[index:]
+        return body
 
     # read everything from the socket
     def recvall(self, sock):
@@ -60,14 +84,84 @@ class HTTPClient(object):
                 done = not part
         return str(buffer)
 
+    #split the url provided into a host name and a path
+    def split_url(self, url):
+        url = url.strip("/")
+        url = url.strip("http://")
+        split_url = url.split("/")
+        host = split_url.pop(0)
+        path = "/"+"/".join(split_url)
+        return path, host
+
+    #get the quey from the path
+    def get_query(self, path):
+        split = path.split("?")
+        path = split[0]
+        if len(split) > 1:
+            query = split[1]
+        else:
+            query = False
+        return path, query
+
+    #send a GET request for the specified page
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        #get the host, path and port number
+        path, host = self.split_url(url)
+        host, port = self.get_host_port(host)
+
+        #connect to the requested web page
+        s = self.connect(host, port)
+        path, query = self.get_query(path)
+
+        #send GET request
+        s.sendall("GET "+path+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n")
+        
+        #look for a reply on the socket
+        data = self.recvall(s)
+        print data
+        #close the connection
+        s.close()
+
+        #Parse the returned data
+        code = self.get_code(data)
+        print "code: "+str(code)+"\n"
+        body = self.get_body(data)
         return HTTPResponse(code, body)
 
-    def POST(self, url, args=None):
-        code = 500
-        body = ""
+    #send a POST request to the specified url
+    def POST(self, url, args=None): 
+        #get the host, path and port number
+        path, host = self.split_url(url)
+        host, port = self.get_host_port(host)
+
+        #connect to the requested web page
+        s = self.connect(host, port)
+        path, host = self.split_url(url)
+
+        #check for attached query
+        path, query = self.get_query(path)
+
+        #send POST request
+        if (query):
+            message = "POST "+path+" HTTP/1.1\r\nHost: "+host+"\r\n"
+            message += "Content-Length: "+str(len(query))+"\r\n"
+            message += "Content-Type: application/x-www-form-encoded\r\n\r\n"
+            message += query
+            s.sendall(message)
+        else:
+            s.sendall("POST "+path+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n")
+
+        #look for a reply on the socket
+        data = self.recvall(s)
+        print data
+
+        #close the connection
+        s.close()
+
+        #Parse the returned data
+        code = self.get_code(data)
+        body = self.get_body(data)
+        print "code: "+str(code)+"\n"
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
@@ -83,6 +177,8 @@ if __name__ == "__main__":
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
+        print sys.argv
         print client.command( sys.argv[2], sys.argv[1] )
     else:
+        print sys.argv
         print client.command( sys.argv[1] )   
