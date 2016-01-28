@@ -53,24 +53,13 @@ class HTTPClient(object):
         s.connect((host, port))
         return s
 
-    #get the status code for the HTTP response
-    def get_code(self, data):
-        headers = self.get_headers(data)
-        headers_split = headers.split(" ")
-        code  = int(headers_split[1])
-        return code
-
     #extract the headers from the page data
-    def get_headers(self,data):
-        index = data.index("<")
-        header = data[:index]
-        return header
-
-    #get the page date, exclude the headers
-    def get_body(self, data):
-        index = data.index("<")
-        body = data[index:]
-        return body
+    def get_info(self,data):
+        code_index = data.find("HTTP/1.")
+        code = int(data[code_index+9:code_index+12])
+        body_index = data.find("\r\n\r\n", 30)
+        body  = data[body_index:]
+        return code, body
 
     # read everything from the socket
     def recvall(self, sock):
@@ -113,19 +102,29 @@ class HTTPClient(object):
         s = self.connect(host, port)
         path, query = self.get_query(path)
 
+        if (args != None):
+            query = urllib.urlencode(args)
+
         #send GET request
-        s.sendall("GET "+path+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n")
+        if (query):
+            message = "GET "+path+" HTTP/1.1\r\nHost: "+host+"\r\n"
+            message += "Connection: close\r\n"
+            message += "Content-Length: "+str(len(query))+"\r\n"
+            message += "Content-Type: application/x-www-form-urlencoded\r\n\r\n"
+            message += query
+            s.sendall(message)
+        else:
+            s.sendall("GET "+path+" HTTP/1.1\r\nHost: "+host+"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         
         #look for a reply on the socket
         data = self.recvall(s)
-        print data
+
         #close the connection
         s.close()
 
         #Parse the returned data
-        code = self.get_code(data)
-        print "code: "+str(code)+"\n"
-        body = self.get_body(data)
+        code,body = self.get_info(data)
+
         return HTTPResponse(code, body)
 
     #send a POST request to the specified url
@@ -141,27 +140,28 @@ class HTTPClient(object):
         #check for attached query
         path, query = self.get_query(path)
 
+        if (args != None):
+            query = urllib.urlencode(args)
+
         #send POST request
         if (query):
             message = "POST "+path+" HTTP/1.1\r\nHost: "+host+"\r\n"
+            message += "Connection: close\r\n"
             message += "Content-Length: "+str(len(query))+"\r\n"
-            message += "Content-Type: application/x-www-form-encoded\r\n\r\n"
+            message += "Content-Type: application/x-www-form-urlencoded\r\n\r\n"
             message += query
             s.sendall(message)
         else:
-            s.sendall("POST "+path+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n")
+            s.sendall("POST "+path+" HTTP/1.1\r\nHost: "+host+"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
         #look for a reply on the socket
         data = self.recvall(s)
-        print data
 
         #close the connection
         s.close()
 
         #Parse the returned data
-        code = self.get_code(data)
-        body = self.get_body(data)
-        print "code: "+str(code)+"\n"
+        code,body = self.get_info(data)
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
@@ -177,8 +177,6 @@ if __name__ == "__main__":
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
-        print sys.argv
         print client.command( sys.argv[2], sys.argv[1] )
     else:
-        print sys.argv
         print client.command( sys.argv[1] )   
